@@ -38,6 +38,16 @@ export const FoosballGame = () => {
   const animationRef = useRef<number>();
   const keysRef = useRef<Set<string>>(new Set());
   const lastTimeRef = useRef<number>(0);
+  const playersRef = useRef<Player[]>([
+    // Red team players (left side)
+    { y: FIELD_HEIGHT / 2, team: 'red', rod: 1 },
+    { y: FIELD_HEIGHT / 2, team: 'red', rod: 2 },
+    { y: FIELD_HEIGHT / 2, team: 'red', rod: 3 },
+    // Blue team players (right side)
+    { y: FIELD_HEIGHT / 2, team: 'blue', rod: 4 },
+    { y: FIELD_HEIGHT / 2, team: 'blue', rod: 5 },
+    { y: FIELD_HEIGHT / 2, team: 'blue', rod: 6 },
+  ]);
   
   const [gameState, setGameState] = useState<GameState>({
     ball: { x: FIELD_WIDTH / 2, y: FIELD_HEIGHT / 2, vx: 0, vy: 0 },
@@ -150,37 +160,39 @@ export const FoosballGame = () => {
       const deltaTime = (currentTime - lastTimeRef.current) / 1000; // Convert to seconds
       lastTimeRef.current = currentTime;
       
-      // Handle player movement
+      // Handle player movement in real-time using refs
+      const keys = keysRef.current;
+      const moveDistance = PLAYER_SPEED * deltaTime;
+      
+      // Player controls based on team
+      if (gameState.playerTeam === 'red') {
+        if (keys.has('w')) {
+          playersRef.current = playersRef.current.map(p => 
+            p.team === 'red' ? { ...p, y: Math.max(PLAYER_HEIGHT/2, p.y - moveDistance) } : p
+          );
+        }
+        if (keys.has('s')) {
+          playersRef.current = playersRef.current.map(p => 
+            p.team === 'red' ? { ...p, y: Math.min(FIELD_HEIGHT - PLAYER_HEIGHT/2, p.y + moveDistance) } : p
+          );
+        }
+      } else if (gameState.playerTeam === 'blue') {
+        if (keys.has('arrowup') || keys.has('up')) {
+          playersRef.current = playersRef.current.map(p => 
+            p.team === 'blue' ? { ...p, y: Math.max(PLAYER_HEIGHT/2, p.y - moveDistance) } : p
+          );
+        }
+        if (keys.has('arrowdown') || keys.has('down')) {
+          playersRef.current = playersRef.current.map(p => 
+            p.team === 'blue' ? { ...p, y: Math.min(FIELD_HEIGHT - PLAYER_HEIGHT/2, p.y + moveDistance) } : p
+          );
+        }
+      }
+      
+      // Handle ball physics and collisions
       setGameState(prev => {
         const newState = { ...prev };
-        const keys = keysRef.current;
-        const moveDistance = PLAYER_SPEED * deltaTime;
         
-        // Player controls based on team
-        if (newState.playerTeam === 'red') {
-          if (keys.has('w')) {
-            newState.players = newState.players.map(p => 
-              p.team === 'red' ? { ...p, y: Math.max(PLAYER_HEIGHT/2, p.y - moveDistance) } : p
-            );
-          }
-          if (keys.has('s')) {
-            newState.players = newState.players.map(p => 
-              p.team === 'red' ? { ...p, y: Math.min(FIELD_HEIGHT - PLAYER_HEIGHT/2, p.y + moveDistance) } : p
-            );
-          }
-        } else if (newState.playerTeam === 'blue') {
-          if (keys.has('arrowup') || keys.has('up')) {
-            newState.players = newState.players.map(p => 
-              p.team === 'blue' ? { ...p, y: Math.max(PLAYER_HEIGHT/2, p.y - moveDistance) } : p
-            );
-          }
-          if (keys.has('arrowdown') || keys.has('down')) {
-            newState.players = newState.players.map(p => 
-              p.team === 'blue' ? { ...p, y: Math.min(FIELD_HEIGHT - PLAYER_HEIGHT/2, p.y + moveDistance) } : p
-            );
-          }
-        }
-
         // Ball physics
         let { ball } = newState;
         ball.x += ball.vx;
@@ -209,8 +221,8 @@ export const FoosballGame = () => {
           ball.vx = -ball.vx;
         }
 
-        // Player collisions
-        newState.players.forEach(player => {
+        // Player collisions using real-time player positions
+        playersRef.current.forEach(player => {
           const rodX = player.team === 'red' 
             ? 100 + (player.rod - 1) * 120 
             : FIELD_WIDTH - 100 - (6 - player.rod) * 120;
@@ -250,8 +262,8 @@ export const FoosballGame = () => {
       ctx.fillRect(0, FIELD_HEIGHT/2 - GOAL_WIDTH/2, 10, GOAL_WIDTH);
       ctx.fillRect(FIELD_WIDTH - 10, FIELD_HEIGHT/2 - GOAL_WIDTH/2, 10, GOAL_WIDTH);
       
-      // Draw players
-      gameState.players.forEach(player => {
+      // Draw players using real-time positions from ref
+      playersRef.current.forEach(player => {
         const rodX = player.team === 'red' 
           ? 100 + (player.rod - 1) * 120 
           : FIELD_WIDTH - 100 - (6 - player.rod) * 120;
