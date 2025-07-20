@@ -8,29 +8,43 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 120 15% 8%;
+    --foreground: 120 30% 95%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 120 12% 12%;
+    --card-foreground: 120 30% 95%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 120 12% 12%;
+    --popover-foreground: 120 30% 95%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 120 70% 45%;
+    --primary-foreground: 120 15% 8%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 120 25% 20%;
+    --secondary-foreground: 120 30% 95%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 120 15% 15%;
+    --muted-foreground: 120 15% 60%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 200 100% 50%;
+    --accent-foreground: 120 15% 8%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
+
+    /* Game-specific colors */
+    --foosball-table: 120 60% 35%;
+    --foosball-field: 120 80% 25%;
+    --foosball-lines: 0 0% 100%;
+    --team-red: 0 80% 55%;
+    --team-blue: 210 80% 55%;
+    --ball: 0 0% 95%;
+    --goal: 0 0% 100%;
+    
+    /* Gradients */
+    --gradient-table: linear-gradient(135deg, hsl(var(--foosball-table)), hsl(120 40% 25%));
+    --gradient-field: linear-gradient(180deg, hsl(var(--foosball-field)), hsl(120 60% 20%));
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(120 60% 35%));
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;

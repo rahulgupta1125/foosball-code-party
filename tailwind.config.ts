@@ -61,6 +61,17 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
+				},
+				foosball: {
+					table: 'hsl(var(--foosball-table))',
+					field: 'hsl(var(--foosball-field))',
+					lines: 'hsl(var(--foosball-lines))',
+					ball: 'hsl(var(--ball))',
+					goal: 'hsl(var(--goal))'
+				},
+				team: {
+					red: 'hsl(var(--team-red))',
+					blue: 'hsl(var(--team-blue))'
 				}
 			},
 			borderRadius: {
@@ -84,11 +95,26 @@ export default {
 					to: {
 						height: '0'
 					}
+				},
+				'ball-bounce': {
+					'0%, 100%': { transform: 'translateY(0px)' },
+					'50%': { transform: 'translateY(-4px)' }
+				},
+				'player-slide': {
+					'0%': { transform: 'translateY(0px)' },
+					'100%': { transform: 'translateY(-20px)' }
+				},
+				'goal-flash': {
+					'0%, 100%': { opacity: '1' },
+					'50%': { opacity: '0.3' }
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+				'ball-bounce': 'ball-bounce 0.3s ease-in-out',
+				'player-slide': 'player-slide 0.2s ease-out',
+				'goal-flash': 'goal-flash 0.5s ease-in-out 2'
 			}
 		}
 	},
