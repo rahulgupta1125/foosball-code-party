@@ -31,11 +31,13 @@ const FIELD_HEIGHT = 400;
 const BALL_SIZE = 12;
 const PLAYER_HEIGHT = 60;
 const GOAL_WIDTH = 80;
+const PLAYER_SPEED = 300; // pixels per second
 
 export const FoosballGame = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
   const keysRef = useRef<Set<string>>(new Set());
+  const lastTimeRef = useRef<number>(0);
   
   const [gameState, setGameState] = useState<GameState>({
     ball: { x: FIELD_WIDTH / 2, y: FIELD_HEIGHT / 2, vx: 0, vy: 0 },
@@ -144,33 +146,37 @@ export const FoosballGame = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const gameLoop = () => {
+    const gameLoop = (currentTime: number) => {
+      const deltaTime = (currentTime - lastTimeRef.current) / 1000; // Convert to seconds
+      lastTimeRef.current = currentTime;
+      
       // Handle player movement
       setGameState(prev => {
         const newState = { ...prev };
         const keys = keysRef.current;
+        const moveDistance = PLAYER_SPEED * deltaTime;
         
         // Player controls based on team
         if (newState.playerTeam === 'red') {
           if (keys.has('w')) {
             newState.players = newState.players.map(p => 
-              p.team === 'red' ? { ...p, y: Math.max(PLAYER_HEIGHT/2, p.y - 5) } : p
+              p.team === 'red' ? { ...p, y: Math.max(PLAYER_HEIGHT/2, p.y - moveDistance) } : p
             );
           }
           if (keys.has('s')) {
             newState.players = newState.players.map(p => 
-              p.team === 'red' ? { ...p, y: Math.min(FIELD_HEIGHT - PLAYER_HEIGHT/2, p.y + 5) } : p
+              p.team === 'red' ? { ...p, y: Math.min(FIELD_HEIGHT - PLAYER_HEIGHT/2, p.y + moveDistance) } : p
             );
           }
         } else if (newState.playerTeam === 'blue') {
           if (keys.has('arrowup') || keys.has('up')) {
             newState.players = newState.players.map(p => 
-              p.team === 'blue' ? { ...p, y: Math.max(PLAYER_HEIGHT/2, p.y - 5) } : p
+              p.team === 'blue' ? { ...p, y: Math.max(PLAYER_HEIGHT/2, p.y - moveDistance) } : p
             );
           }
           if (keys.has('arrowdown') || keys.has('down')) {
             newState.players = newState.players.map(p => 
-              p.team === 'blue' ? { ...p, y: Math.min(FIELD_HEIGHT - PLAYER_HEIGHT/2, p.y + 5) } : p
+              p.team === 'blue' ? { ...p, y: Math.min(FIELD_HEIGHT - PLAYER_HEIGHT/2, p.y + moveDistance) } : p
             );
           }
         }
