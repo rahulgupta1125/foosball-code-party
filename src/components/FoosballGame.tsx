@@ -163,12 +163,12 @@ export const FoosballGame = () => {
             );
           }
         } else if (newState.playerTeam === 'blue') {
-          if (keys.has('arrowup')) {
+          if (keys.has('arrowup') || keys.has('up')) {
             newState.players = newState.players.map(p => 
               p.team === 'blue' ? { ...p, y: Math.max(PLAYER_HEIGHT/2, p.y - 5) } : p
             );
           }
-          if (keys.has('arrowdown')) {
+          if (keys.has('arrowdown') || keys.has('down')) {
             newState.players = newState.players.map(p => 
               p.team === 'blue' ? { ...p, y: Math.min(FIELD_HEIGHT - PLAYER_HEIGHT/2, p.y + 5) } : p
             );
