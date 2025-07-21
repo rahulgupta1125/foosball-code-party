@@ -24,6 +24,7 @@ interface GameState {
   gameStatus: 'waiting' | 'playing' | 'paused' | 'goal';
   roomCode: string;
   playerTeam: 'red' | 'blue' | null;
+  gameMode: 'single' | 'multi' | null;
 }
 
 const FIELD_WIDTH = 800;
@@ -64,26 +65,48 @@ export const FoosballGame = () => {
     score: { red: 0, blue: 0 },
     gameStatus: 'waiting',
     roomCode: '',
-    playerTeam: null
+    playerTeam: null,
+    gameMode: null
   });
 
   const [showRoomInput, setShowRoomInput] = useState(false);
   const [roomInput, setRoomInput] = useState('');
+  const [showGameModeSelection, setShowGameModeSelection] = useState(false);
 
   // Generate unique room code
   const generateRoomCode = useCallback(() => {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
   }, []);
 
-  // Create new game
-  const createGame = useCallback(() => {
+  // Show game mode selection
+  const showModeSelection = useCallback(() => {
+    setShowGameModeSelection(true);
+  }, []);
+
+  // Create single player game
+  const createSinglePlayerGame = useCallback(() => {
+    setGameState(prev => ({
+      ...prev,
+      roomCode: 'SINGLE',
+      playerTeam: 'red',
+      gameStatus: 'waiting',
+      gameMode: 'single'
+    }));
+    setShowGameModeSelection(false);
+    toast("Single player game created!");
+  }, []);
+
+  // Create multiplayer game
+  const createMultiPlayerGame = useCallback(() => {
     const code = generateRoomCode();
     setGameState(prev => ({
       ...prev,
       roomCode: code,
       playerTeam: 'red',
-      gameStatus: 'waiting'
+      gameStatus: 'waiting',
+      gameMode: 'multi'
     }));
+    setShowGameModeSelection(false);
     toast(`Room created! Share code: ${code}`);
   }, [generateRoomCode]);
 
@@ -97,7 +120,8 @@ export const FoosballGame = () => {
       ...prev,
       roomCode: roomInput.toUpperCase(),
       playerTeam: 'blue',
-      gameStatus: 'playing'
+      gameStatus: 'playing',
+      gameMode: 'multi'
     }));
     setShowRoomInput(false);
     toast(`Joined room: ${roomInput.toUpperCase()}`);
@@ -176,7 +200,7 @@ export const FoosballGame = () => {
             p.team === 'red' ? { ...p, y: Math.min(FIELD_HEIGHT - PLAYER_HEIGHT/2, p.y + moveDistance) } : p
           );
         }
-      } else if (gameState.playerTeam === 'blue') {
+      } else if (gameState.playerTeam === 'blue' && gameState.gameMode === 'multi') {
         if (keys.has('arrowup') || keys.has('up')) {
           playersRef.current = playersRef.current.map(p => 
             p.team === 'blue' ? { ...p, y: Math.max(PLAYER_HEIGHT/2, p.y - moveDistance) } : p
@@ -187,6 +211,30 @@ export const FoosballGame = () => {
             p.team === 'blue' ? { ...p, y: Math.min(FIELD_HEIGHT - PLAYER_HEIGHT/2, p.y + moveDistance) } : p
           );
         }
+      }
+
+      // Computer AI for single player mode
+      if (gameState.gameMode === 'single') {
+        const ball = gameState.ball;
+        const targetY = ball.y;
+        
+        playersRef.current = playersRef.current.map(p => {
+          if (p.team === 'blue') {
+            const currentY = p.y;
+            const diff = targetY - currentY;
+            const aiSpeed = PLAYER_SPEED * 0.7; // AI moves slightly slower
+            
+            if (Math.abs(diff) > 10) {
+              const direction = diff > 0 ? 1 : -1;
+              const newY = currentY + direction * aiSpeed * deltaTime;
+              return {
+                ...p,
+                y: Math.max(PLAYER_HEIGHT/2, Math.min(FIELD_HEIGHT - PLAYER_HEIGHT/2, newY))
+              };
+            }
+          }
+          return p;
+        });
       }
       
       // Handle ball physics and collisions
@@ -306,7 +354,7 @@ export const FoosballGame = () => {
           <p className="text-muted-foreground">Choose how to play</p>
           
           <div className="space-y-4">
-            <Button onClick={createGame} className="w-full" size="lg">
+            <Button onClick={showModeSelection} className="w-full" size="lg">
               Create New Game
             </Button>
             
@@ -319,6 +367,27 @@ export const FoosballGame = () => {
               Join Game
             </Button>
           </div>
+
+          {showGameModeSelection && (
+            <div className="space-y-3 pt-4 border-t">
+              <h3 className="text-lg font-semibold">Select Game Mode</h3>
+              <div className="space-y-2">
+                <Button onClick={createSinglePlayerGame} className="w-full">
+                  Single Player
+                </Button>
+                <Button onClick={createMultiPlayerGame} className="w-full" variant="secondary">
+                  Multiplayer
+                </Button>
+                <Button 
+                  onClick={() => setShowGameModeSelection(false)} 
+                  variant="outline"
+                  className="w-full"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
 
           {showRoomInput && (
             <div className="space-y-3 pt-4 border-t">
@@ -354,11 +423,14 @@ export const FoosballGame = () => {
         {/* Game Header */}
         <div className="flex justify-between items-center">
           <div className="text-center">
-            <h1 className="text-2xl font-bold">Room: {gameState.roomCode}</h1>
+            <h1 className="text-2xl font-bold">
+              {gameState.gameMode === 'single' ? 'Single Player' : `Room: ${gameState.roomCode}`}
+            </h1>
             <p className="text-muted-foreground">
               You are: <span className={`font-bold ${gameState.playerTeam === 'red' ? 'text-team-red' : 'text-team-blue'}`}>
                 {gameState.playerTeam?.toUpperCase()} team
               </span>
+              {gameState.gameMode === 'single' && ' vs Computer'}
             </p>
           </div>
           
@@ -403,8 +475,14 @@ export const FoosballGame = () => {
             </div>
             <div>
               <h3 className="font-semibold text-team-blue mb-2">Blue Team Controls:</h3>
-              <p>↑ - Move players up</p>
-              <p>↓ - Move players down</p>
+              {gameState.gameMode === 'single' ? (
+                <p>Computer controlled</p>
+              ) : (
+                <>
+                  <p>↑ - Move players up</p>
+                  <p>↓ - Move players down</p>
+                </>
+              )}
             </div>
           </div>
         </Card>
