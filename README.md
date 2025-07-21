@@ -8,7 +8,7 @@ Just share a **unique link with a friend** and start playing—straight in the b
 
 ## 🚀 Live Demo
 
-🔗 [Click here to play now](https://your-custom-domain.com)  
+🔗 [Click here to play now](https://foosball-code-party.vercel.app/)  
 (*Open this link in two tabs or send it to a friend to start a match!*)
 
 ---
