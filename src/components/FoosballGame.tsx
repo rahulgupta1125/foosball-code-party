@@ -137,6 +137,29 @@ export const FoosballGame = () => {
     toast("Game started!");
   }, []);
 
+  // Quit game
+  const quitGame = useCallback(() => {
+    setGameState({
+      ball: { x: FIELD_WIDTH / 2, y: FIELD_HEIGHT / 2, vx: 0, vy: 0 },
+      players: [
+        { y: FIELD_HEIGHT / 2, team: 'red', rod: 1 },
+        { y: FIELD_HEIGHT / 2, team: 'red', rod: 2 },
+        { y: FIELD_HEIGHT / 2, team: 'red', rod: 3 },
+        { y: FIELD_HEIGHT / 2, team: 'blue', rod: 4 },
+        { y: FIELD_HEIGHT / 2, team: 'blue', rod: 5 },
+        { y: FIELD_HEIGHT / 2, team: 'blue', rod: 6 },
+      ],
+      score: { red: 0, blue: 0 },
+      gameStatus: 'waiting',
+      roomCode: '',
+      playerTeam: null,
+      gameMode: null
+    });
+    setShowRoomInput(false);
+    setShowGameModeSelection(false);
+    toast("Game ended");
+  }, []);
+
   // Reset ball position
   const resetBall = useCallback(() => {
     setGameState(prev => ({
@@ -251,21 +274,24 @@ export const FoosballGame = () => {
           ball.vy = -ball.vy;
         }
 
-        // Goal detection
-        if (ball.x <= 0) {
+        // Goal detection - ball must completely cross the goal line
+        if (ball.x <= -BALL_SIZE/2) {
           newState.score.blue++;
           newState.gameStatus = 'goal';
           toast("Blue team scores!");
           setTimeout(() => resetBall(), 2000);
-        } else if (ball.x >= FIELD_WIDTH) {
+        } else if (ball.x >= FIELD_WIDTH + BALL_SIZE/2) {
           newState.score.red++;
           newState.gameStatus = 'goal';
           toast("Red team scores!");
           setTimeout(() => resetBall(), 2000);
         }
 
-        // Side wall bounces
-        if (ball.x <= BALL_SIZE/2 || ball.x >= FIELD_WIDTH - BALL_SIZE/2) {
+        // Side wall bounces (but not goals)
+        if ((ball.x <= BALL_SIZE/2 && ball.y < FIELD_HEIGHT/2 - GOAL_WIDTH/2) || 
+            (ball.x <= BALL_SIZE/2 && ball.y > FIELD_HEIGHT/2 + GOAL_WIDTH/2) ||
+            (ball.x >= FIELD_WIDTH - BALL_SIZE/2 && ball.y < FIELD_HEIGHT/2 - GOAL_WIDTH/2) ||
+            (ball.x >= FIELD_WIDTH - BALL_SIZE/2 && ball.y > FIELD_HEIGHT/2 + GOAL_WIDTH/2)) {
           ball.vx = -ball.vx;
         }
 
@@ -449,6 +475,9 @@ export const FoosballGame = () => {
             {gameState.gameStatus === 'waiting' && (
               <Button onClick={startGame}>Start Game</Button>
             )}
+            <Button onClick={quitGame} variant="outline" size="sm">
+              Quit Game
+            </Button>
             <div className="text-xs text-muted-foreground">
               {gameState.playerTeam === 'red' ? 'W/S to move' : '↑/↓ to move'}
             </div>
