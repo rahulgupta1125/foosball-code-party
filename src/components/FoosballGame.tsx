@@ -3,6 +3,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { GameScores } from "@/components/GameScores";
 
 interface Ball {
   x: number;
@@ -21,7 +23,7 @@ interface GameState {
   ball: Ball;
   players: Player[];
   score: { red: number; blue: number };
-  gameStatus: 'waiting' | 'playing' | 'paused' | 'goal';
+  gameStatus: 'waiting' | 'playing' | 'paused' | 'goal' | 'ended';
   roomCode: string;
   playerTeam: 'red' | 'blue' | null;
   gameMode: 'single' | 'multi' | null;
@@ -137,8 +139,35 @@ export const FoosballGame = () => {
     toast("Game started!");
   }, []);
 
+  // Save game score to database
+  const saveGameScore = useCallback(async (playerScore: number, opponentScore: number, status: 'completed' | 'quit') => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await supabase
+        .from('game_scores')
+        .insert({
+          user_id: user.id,
+          player_score: playerScore,
+          opponent_score: opponentScore,
+          game_mode: gameState.gameMode || 'single',
+          game_status: status
+        });
+    } catch (error) {
+      console.error('Error saving game score:', error);
+    }
+  }, [gameState.gameMode]);
+
   // Quit game
-  const quitGame = useCallback(() => {
+  const quitGame = useCallback(async () => {
+    // Save current score as quit game
+    if (gameState.score.red > 0 || gameState.score.blue > 0) {
+      const playerScore = gameState.playerTeam === 'red' ? gameState.score.red : gameState.score.blue;
+      const opponentScore = gameState.playerTeam === 'red' ? gameState.score.blue : gameState.score.red;
+      await saveGameScore(playerScore, opponentScore, 'quit');
+    }
+
     setGameState({
       ball: { x: FIELD_WIDTH / 2, y: FIELD_HEIGHT / 2, vx: 0, vy: 0 },
       players: [
@@ -158,7 +187,7 @@ export const FoosballGame = () => {
     setShowRoomInput(false);
     setShowGameModeSelection(false);
     toast("Game ended");
-  }, []);
+  }, [gameState.score, gameState.playerTeam, saveGameScore]);
 
   // Reset ball position
   const resetBall = useCallback(() => {
@@ -279,12 +308,32 @@ export const FoosballGame = () => {
           newState.score.blue++;
           newState.gameStatus = 'goal';
           toast("Blue team scores!");
-          setTimeout(() => resetBall(), 2000);
+          
+          // Check if game should end (score reaches 10)
+          if (newState.score.blue >= 10) {
+            newState.gameStatus = 'ended';
+            const playerScore = gameState.playerTeam === 'blue' ? newState.score.blue : newState.score.red;
+            const opponentScore = gameState.playerTeam === 'blue' ? newState.score.red : newState.score.blue;
+            saveGameScore(playerScore, opponentScore, 'completed');
+            toast.success(newState.score.blue >= 10 ? "Blue team wins!" : "Red team wins!");
+          } else {
+            setTimeout(() => resetBall(), 2000);
+          }
         } else if (ball.x >= FIELD_WIDTH + BALL_SIZE/2) {
           newState.score.red++;
           newState.gameStatus = 'goal';
           toast("Red team scores!");
-          setTimeout(() => resetBall(), 2000);
+          
+          // Check if game should end (score reaches 10)
+          if (newState.score.red >= 10) {
+            newState.gameStatus = 'ended';
+            const playerScore = gameState.playerTeam === 'red' ? newState.score.red : newState.score.blue;
+            const opponentScore = gameState.playerTeam === 'red' ? newState.score.blue : newState.score.red;
+            saveGameScore(playerScore, opponentScore, 'completed');
+            toast.success(newState.score.red >= 10 ? "Red team wins!" : "Blue team wins!");
+          } else {
+            setTimeout(() => resetBall(), 2000);
+          }
         }
 
         // Side wall bounces (but not goals)
@@ -370,7 +419,7 @@ export const FoosballGame = () => {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [gameState.gameStatus, gameState.playerTeam, resetBall]);
+  }, [gameState.gameStatus, gameState.playerTeam, resetBall, saveGameScore]);
 
   if (gameState.gameStatus === 'waiting' && !gameState.roomCode) {
     return (
@@ -439,6 +488,36 @@ export const FoosballGame = () => {
             </div>
           )}
         </Card>
+      </div>
+    );
+  }
+
+  // Game ended screen
+  if (gameState.gameStatus === 'ended') {
+    const playerScore = gameState.playerTeam === 'red' ? gameState.score.red : gameState.score.blue;
+    const opponentScore = gameState.playerTeam === 'red' ? gameState.score.blue : gameState.score.red;
+    const playerWon = playerScore > opponentScore;
+
+    return (
+      <div className="min-h-screen bg-background p-4">
+        <div className="max-w-4xl mx-auto space-y-6">
+          <Card className="p-8 text-center">
+            <h1 className="text-4xl font-bold mb-4">
+              {playerWon ? "🎉 You Won!" : "💪 Good Game!"}
+            </h1>
+            <div className="text-2xl font-semibold mb-4">
+              Final Score: {gameState.score.red} - {gameState.score.blue}
+            </div>
+            <div className="text-muted-foreground mb-6">
+              {gameState.gameMode === 'single' ? 'Single Player vs AI' : 'Multiplayer Game'}
+            </div>
+            <Button onClick={quitGame} size="lg">
+              Play Again
+            </Button>
+          </Card>
+          
+          <GameScores />
+        </div>
       </div>
     );
   }
