@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { GameScores } from "@/components/GameScores";
+import { useMultiplayerRoom } from "@/hooks/useMultiplayerRoom";
+import { MultiplayerControls } from "./MultiplayerControls";
 
 interface Ball {
   x: number;
@@ -24,8 +25,6 @@ interface GameState {
   players: Player[];
   score: { red: number; blue: number };
   gameStatus: 'waiting' | 'playing' | 'paused' | 'goal' | 'ended';
-  roomCode: string;
-  playerTeam: 'red' | 'blue' | null;
   gameMode: 'single' | 'multi' | null;
 }
 
@@ -34,7 +33,7 @@ const FIELD_HEIGHT = 400;
 const BALL_SIZE = 12;
 const PLAYER_HEIGHT = 60;
 const GOAL_WIDTH = 80;
-const PLAYER_SPEED = 300; // pixels per second
+const PLAYER_SPEED = 300;
 
 export const FoosballGame = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -42,11 +41,9 @@ export const FoosballGame = () => {
   const keysRef = useRef<Set<string>>(new Set());
   const lastTimeRef = useRef<number>(0);
   const playersRef = useRef<Player[]>([
-    // Red team players (left side)
     { y: FIELD_HEIGHT / 2, team: 'red', rod: 1 },
     { y: FIELD_HEIGHT / 2, team: 'red', rod: 2 },
     { y: FIELD_HEIGHT / 2, team: 'red', rod: 3 },
-    // Blue team players (right side)
     { y: FIELD_HEIGHT / 2, team: 'blue', rod: 4 },
     { y: FIELD_HEIGHT / 2, team: 'blue', rod: 5 },
     { y: FIELD_HEIGHT / 2, team: 'blue', rod: 6 },
@@ -55,42 +52,52 @@ export const FoosballGame = () => {
   const [gameState, setGameState] = useState<GameState>({
     ball: { x: FIELD_WIDTH / 2, y: FIELD_HEIGHT / 2, vx: 0, vy: 0 },
     players: [
-      // Red team players (left side)
       { y: FIELD_HEIGHT / 2, team: 'red', rod: 1 },
       { y: FIELD_HEIGHT / 2, team: 'red', rod: 2 },
       { y: FIELD_HEIGHT / 2, team: 'red', rod: 3 },
-      // Blue team players (right side)
       { y: FIELD_HEIGHT / 2, team: 'blue', rod: 4 },
       { y: FIELD_HEIGHT / 2, team: 'blue', rod: 5 },
       { y: FIELD_HEIGHT / 2, team: 'blue', rod: 6 },
     ],
     score: { red: 0, blue: 0 },
     gameStatus: 'waiting',
-    roomCode: '',
-    playerTeam: null,
     gameMode: null
   });
 
-  const [showRoomInput, setShowRoomInput] = useState(false);
-  const [roomInput, setRoomInput] = useState('');
   const [showGameModeSelection, setShowGameModeSelection] = useState(false);
+  const { room, isCreator, isConnected, createRoom, joinRoom, updateGameState, leaveRoom } = useMultiplayerRoom();
 
-  // Generate unique room code
-  const generateRoomCode = useCallback(() => {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
-  }, []);
+  // Sync game state with multiplayer room
+  useEffect(() => {
+    if (room && room.game_state) {
+      const roomState = room.game_state;
+      setGameState(prev => ({
+        ...prev,
+        score: { 
+          red: roomState.player1_score, 
+          blue: roomState.player2_score 
+        },
+        gameStatus: roomState.game_status === 'waiting' ? 'waiting' : 
+                   roomState.game_status === 'playing' ? 'playing' : 'ended',
+        gameMode: 'multi'
+      }));
 
-  // Show game mode selection
-  const showModeSelection = useCallback(() => {
-    setShowGameModeSelection(true);
-  }, []);
+      // Check if game should end
+      if (roomState.player1_score >= 10 || roomState.player2_score >= 10) {
+        setGameState(prev => ({ ...prev, gameStatus: 'ended' }));
+        saveGameScore(
+          isCreator ? roomState.player1_score : roomState.player2_score,
+          isCreator ? roomState.player2_score : roomState.player1_score,
+          'completed'
+        );
+      }
+    }
+  }, [room, isCreator]);
 
   // Create single player game
   const createSinglePlayerGame = useCallback(() => {
     setGameState(prev => ({
       ...prev,
-      roomCode: 'SINGLE',
-      playerTeam: 'red',
       gameStatus: 'waiting',
       gameMode: 'single'
     }));
@@ -99,45 +106,24 @@ export const FoosballGame = () => {
   }, []);
 
   // Create multiplayer game
-  const createMultiPlayerGame = useCallback(() => {
-    const code = generateRoomCode();
-    setGameState(prev => ({
-      ...prev,
-      roomCode: code,
-      playerTeam: 'red',
-      gameStatus: 'waiting',
-      gameMode: 'multi'
-    }));
+  const createMultiPlayerGame = useCallback(async () => {
+    await createRoom();
     setShowGameModeSelection(false);
-    toast(`Room created! Share code: ${code}`);
-  }, [generateRoomCode]);
-
-  // Join game
-  const joinGame = useCallback(() => {
-    if (!roomInput.trim()) {
-      toast.error("Please enter a room code");
-      return;
-    }
-    setGameState(prev => ({
-      ...prev,
-      roomCode: roomInput.toUpperCase(),
-      playerTeam: 'blue',
-      gameStatus: 'playing',
-      gameMode: 'multi'
-    }));
-    setShowRoomInput(false);
-    toast(`Joined room: ${roomInput.toUpperCase()}`);
-  }, [roomInput]);
+  }, [createRoom]);
 
   // Start game
-  const startGame = useCallback(() => {
+  const startGame = useCallback(async () => {
+    if (gameState.gameMode === 'multi' && room) {
+      await updateGameState({ game_status: 'playing' });
+    }
+    
     setGameState(prev => ({
       ...prev,
       gameStatus: 'playing',
       ball: { x: FIELD_WIDTH / 2, y: FIELD_HEIGHT / 2, vx: 3, vy: 2 }
     }));
     toast("Game started!");
-  }, []);
+  }, [gameState.gameMode, room, updateGameState]);
 
   // Save game score to database
   const saveGameScore = useCallback(async (playerScore: number, opponentScore: number, status: 'completed' | 'quit') => {
@@ -161,11 +147,14 @@ export const FoosballGame = () => {
 
   // Quit game
   const quitGame = useCallback(async () => {
-    // Save current score as quit game
     if (gameState.score.red > 0 || gameState.score.blue > 0) {
-      const playerScore = gameState.playerTeam === 'red' ? gameState.score.red : gameState.score.blue;
-      const opponentScore = gameState.playerTeam === 'red' ? gameState.score.blue : gameState.score.red;
+      const playerScore = isCreator ? gameState.score.red : gameState.score.blue;
+      const opponentScore = isCreator ? gameState.score.blue : gameState.score.red;
       await saveGameScore(playerScore, opponentScore, 'quit');
+    }
+
+    if (isConnected) {
+      await leaveRoom();
     }
 
     setGameState({
@@ -180,14 +169,11 @@ export const FoosballGame = () => {
       ],
       score: { red: 0, blue: 0 },
       gameStatus: 'waiting',
-      roomCode: '',
-      playerTeam: null,
       gameMode: null
     });
-    setShowRoomInput(false);
     setShowGameModeSelection(false);
     toast("Game ended");
-  }, [gameState.score, gameState.playerTeam, saveGameScore]);
+  }, [gameState.score, isCreator, isConnected, leaveRoom, saveGameScore]);
 
   // Reset ball position
   const resetBall = useCallback(() => {
@@ -202,6 +188,17 @@ export const FoosballGame = () => {
       gameStatus: 'playing'
     }));
   }, []);
+
+  // Update multiplayer score
+  const updateMultiplayerScore = useCallback(async (redScore: number, blueScore: number) => {
+    if (room && gameState.gameMode === 'multi') {
+      await updateGameState({
+        player1_score: redScore,
+        player2_score: blueScore,
+        game_status: redScore >= 10 || blueScore >= 10 ? 'finished' : 'playing'
+      });
+    }
+  }, [room, gameState.gameMode, updateGameState]);
 
   // Handle keyboard input
   useEffect(() => {
@@ -233,15 +230,16 @@ export const FoosballGame = () => {
     if (!ctx) return;
 
     const gameLoop = (currentTime: number) => {
-      const deltaTime = (currentTime - lastTimeRef.current) / 1000; // Convert to seconds
+      const deltaTime = (currentTime - lastTimeRef.current) / 1000;
       lastTimeRef.current = currentTime;
       
-      // Handle player movement in real-time using refs
       const keys = keysRef.current;
       const moveDistance = PLAYER_SPEED * deltaTime;
       
-      // Player controls based on team
-      if (gameState.playerTeam === 'red') {
+      // Player controls based on team and game mode
+      const playerTeam = isCreator ? 'red' : 'blue';
+      
+      if (gameState.gameMode === 'single' || (gameState.gameMode === 'multi' && playerTeam === 'red')) {
         if (keys.has('w')) {
           playersRef.current = playersRef.current.map(p => 
             p.team === 'red' ? { ...p, y: Math.max(PLAYER_HEIGHT/2, p.y - moveDistance) } : p
@@ -252,7 +250,9 @@ export const FoosballGame = () => {
             p.team === 'red' ? { ...p, y: Math.min(FIELD_HEIGHT - PLAYER_HEIGHT/2, p.y + moveDistance) } : p
           );
         }
-      } else if (gameState.playerTeam === 'blue' && gameState.gameMode === 'multi') {
+      }
+      
+      if (gameState.gameMode === 'multi' && playerTeam === 'blue') {
         if (keys.has('arrowup') || keys.has('up')) {
           playersRef.current = playersRef.current.map(p => 
             p.team === 'blue' ? { ...p, y: Math.max(PLAYER_HEIGHT/2, p.y - moveDistance) } : p
@@ -274,7 +274,7 @@ export const FoosballGame = () => {
           if (p.team === 'blue') {
             const currentY = p.y;
             const diff = targetY - currentY;
-            const aiSpeed = PLAYER_SPEED * 0.7; // AI moves slightly slower
+            const aiSpeed = PLAYER_SPEED * 0.7;
             
             if (Math.abs(diff) > 10) {
               const direction = diff > 0 ? 1 : -1;
@@ -293,7 +293,6 @@ export const FoosballGame = () => {
       setGameState(prev => {
         const newState = { ...prev };
         
-        // Ball physics
         let { ball } = newState;
         ball.x += ball.vx;
         ball.y += ball.vy;
@@ -303,19 +302,16 @@ export const FoosballGame = () => {
           ball.vy = -ball.vy;
         }
 
-        // Goal detection - ball must completely cross the goal line
+        // Goal detection
         if (ball.x <= -BALL_SIZE/2) {
           newState.score.blue++;
           newState.gameStatus = 'goal';
           toast("Blue team scores!");
+          updateMultiplayerScore(newState.score.red, newState.score.blue);
           
-          // Check if game should end (score reaches 10)
           if (newState.score.blue >= 10) {
             newState.gameStatus = 'ended';
-            const playerScore = gameState.playerTeam === 'blue' ? newState.score.blue : newState.score.red;
-            const opponentScore = gameState.playerTeam === 'blue' ? newState.score.red : newState.score.blue;
-            saveGameScore(playerScore, opponentScore, 'completed');
-            toast.success(newState.score.blue >= 10 ? "Blue team wins!" : "Red team wins!");
+            toast.success("Blue team wins!");
           } else {
             setTimeout(() => resetBall(), 2000);
           }
@@ -323,20 +319,17 @@ export const FoosballGame = () => {
           newState.score.red++;
           newState.gameStatus = 'goal';
           toast("Red team scores!");
+          updateMultiplayerScore(newState.score.red, newState.score.blue);
           
-          // Check if game should end (score reaches 10)
           if (newState.score.red >= 10) {
             newState.gameStatus = 'ended';
-            const playerScore = gameState.playerTeam === 'red' ? newState.score.red : newState.score.blue;
-            const opponentScore = gameState.playerTeam === 'red' ? newState.score.blue : newState.score.red;
-            saveGameScore(playerScore, opponentScore, 'completed');
-            toast.success(newState.score.red >= 10 ? "Red team wins!" : "Blue team wins!");
+            toast.success("Red team wins!");
           } else {
             setTimeout(() => resetBall(), 2000);
           }
         }
 
-        // Side wall bounces (but not goals)
+        // Side wall bounces
         if ((ball.x <= BALL_SIZE/2 && ball.y < FIELD_HEIGHT/2 - GOAL_WIDTH/2) || 
             (ball.x <= BALL_SIZE/2 && ball.y > FIELD_HEIGHT/2 + GOAL_WIDTH/2) ||
             (ball.x >= FIELD_WIDTH - BALL_SIZE/2 && ball.y < FIELD_HEIGHT/2 - GOAL_WIDTH/2) ||
@@ -344,7 +337,7 @@ export const FoosballGame = () => {
           ball.vx = -ball.vx;
         }
 
-        // Player collisions using real-time player positions
+        // Player collisions
         playersRef.current.forEach(player => {
           const rodX = player.team === 'red' 
             ? 100 + (player.rod - 1) * 120 
@@ -385,7 +378,7 @@ export const FoosballGame = () => {
       ctx.fillRect(0, FIELD_HEIGHT/2 - GOAL_WIDTH/2, 10, GOAL_WIDTH);
       ctx.fillRect(FIELD_WIDTH - 10, FIELD_HEIGHT/2 - GOAL_WIDTH/2, 10, GOAL_WIDTH);
       
-      // Draw players using real-time positions from ref
+      // Draw players
       playersRef.current.forEach(player => {
         const rodX = player.team === 'red' 
           ? 100 + (player.rod - 1) * 120 
@@ -419,39 +412,31 @@ export const FoosballGame = () => {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [gameState.gameStatus, gameState.playerTeam, resetBall, saveGameScore]);
+  }, [gameState.gameStatus, gameState.gameMode, isCreator, resetBall, updateMultiplayerScore]);
 
-  if (gameState.gameStatus === 'waiting' && !gameState.roomCode) {
+  // Initial game mode selection
+  if (!gameState.gameMode && !isConnected) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="p-8 text-center space-y-6 max-w-md">
           <h1 className="text-4xl font-bold text-primary">Foosball Online</h1>
           <p className="text-muted-foreground">Choose how to play</p>
           
-          <div className="space-y-4">
-            <Button onClick={showModeSelection} className="w-full" size="lg">
-              Create New Game
-            </Button>
-            
-            <Button 
-              onClick={() => setShowRoomInput(true)} 
-              variant="secondary" 
-              className="w-full"
-              size="lg"
-            >
-              Join Game
-            </Button>
-          </div>
-
-          {showGameModeSelection && (
+          {!showGameModeSelection ? (
+            <div className="space-y-4">
+              <Button onClick={() => setShowGameModeSelection(true)} className="w-full" size="lg">
+                Start Game
+              </Button>
+            </div>
+          ) : (
             <div className="space-y-3 pt-4 border-t">
               <h3 className="text-lg font-semibold">Select Game Mode</h3>
               <div className="space-y-2">
                 <Button onClick={createSinglePlayerGame} className="w-full">
-                  Single Player
+                  Single Player vs AI
                 </Button>
                 <Button onClick={createMultiPlayerGame} className="w-full" variant="secondary">
-                  Multiplayer
+                  Multiplayer Online
                 </Button>
                 <Button 
                   onClick={() => setShowGameModeSelection(false)} 
@@ -463,39 +448,65 @@ export const FoosballGame = () => {
               </div>
             </div>
           )}
-
-          {showRoomInput && (
-            <div className="space-y-3 pt-4 border-t">
-              <Input
-                placeholder="Enter room code"
-                value={roomInput}
-                onChange={(e) => setRoomInput(e.target.value)}
-                className="text-center uppercase"
-                maxLength={6}
-              />
-              <div className="flex gap-2">
-                <Button onClick={joinGame} className="flex-1">
-                  Join
-                </Button>
-                <Button 
-                  onClick={() => setShowRoomInput(false)} 
-                  variant="outline"
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
         </Card>
+      </div>
+    );
+  }
+
+  // Multiplayer lobby
+  if (gameState.gameMode === 'multi' && isConnected && room?.game_state.game_status === 'waiting') {
+    const playerTeam = isCreator ? 'red' : 'blue';
+    
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="max-w-2xl mx-auto space-y-6">
+          <MultiplayerControls
+            onCreateRoom={createRoom}
+            onJoinRoom={joinRoom}
+            roomCode={room?.room_code}
+            isConnected={isConnected}
+            isWaiting={!room?.opponent_id}
+            onLeaveRoom={leaveRoom}
+          />
+          
+          {room?.opponent_id && (
+            <Card className="p-6 text-center">
+              <h2 className="text-xl font-semibold mb-4">Ready to Play!</h2>
+              <p className="text-muted-foreground mb-4">
+                You are the <span className={`font-bold ${playerTeam === 'red' ? 'text-red-500' : 'text-blue-500'}`}>
+                  {playerTeam.toUpperCase()}
+                </span> team
+              </p>
+              <Button onClick={startGame} size="lg">
+                Start Game
+              </Button>
+            </Card>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Multiplayer room setup
+  if (gameState.gameMode === 'multi' && !isConnected) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <MultiplayerControls
+          onCreateRoom={createRoom}
+          onJoinRoom={joinRoom}
+          isConnected={isConnected}
+          isWaiting={false}
+          onLeaveRoom={leaveRoom}
+        />
       </div>
     );
   }
 
   // Game ended screen
   if (gameState.gameStatus === 'ended') {
-    const playerScore = gameState.playerTeam === 'red' ? gameState.score.red : gameState.score.blue;
-    const opponentScore = gameState.playerTeam === 'red' ? gameState.score.blue : gameState.score.red;
+    const playerTeam = gameState.gameMode === 'single' ? 'red' : (isCreator ? 'red' : 'blue');
+    const playerScore = playerTeam === 'red' ? gameState.score.red : gameState.score.blue;
+    const opponentScore = playerTeam === 'red' ? gameState.score.blue : gameState.score.red;
     const playerWon = playerScore > opponentScore;
 
     return (
@@ -509,7 +520,7 @@ export const FoosballGame = () => {
               Final Score: {gameState.score.red} - {gameState.score.blue}
             </div>
             <div className="text-muted-foreground mb-6">
-              {gameState.gameMode === 'single' ? 'Single Player vs AI' : 'Multiplayer Game'}
+              {gameState.gameMode === 'single' ? 'Single Player vs AI' : `Multiplayer Game - Room ${room?.room_code}`}
             </div>
             <Button onClick={quitGame} size="lg">
               Play Again
@@ -522,6 +533,8 @@ export const FoosballGame = () => {
     );
   }
 
+  const playerTeam = gameState.gameMode === 'single' ? 'red' : (isCreator ? 'red' : 'blue');
+
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-6xl mx-auto space-y-4">
@@ -529,22 +542,21 @@ export const FoosballGame = () => {
         <div className="flex justify-between items-center">
           <div className="text-center">
             <h1 className="text-2xl font-bold">
-              {gameState.gameMode === 'single' ? 'Single Player' : `Room: ${gameState.roomCode}`}
+              {gameState.gameMode === 'single' ? 'Single Player vs AI' : `Room: ${room?.room_code}`}
             </h1>
             <p className="text-muted-foreground">
-              You are: <span className={`font-bold ${gameState.playerTeam === 'red' ? 'text-team-red' : 'text-team-blue'}`}>
-                {gameState.playerTeam?.toUpperCase()} team
+              You are: <span className={`font-bold ${playerTeam === 'red' ? 'text-red-500' : 'text-blue-500'}`}>
+                {playerTeam.toUpperCase()} team
               </span>
-              {gameState.gameMode === 'single' && ' vs Computer'}
             </p>
           </div>
           
           {/* Score */}
           <div className="text-center">
             <div className="text-3xl font-bold space-x-4">
-              <span className="text-team-red">{gameState.score.red}</span>
+              <span className="text-red-500">{gameState.score.red}</span>
               <span>-</span>
-              <span className="text-team-blue">{gameState.score.blue}</span>
+              <span className="text-blue-500">{gameState.score.blue}</span>
             </div>
             <p className="text-sm text-muted-foreground">RED - BLUE</p>
           </div>
@@ -558,18 +570,18 @@ export const FoosballGame = () => {
               Quit Game
             </Button>
             <div className="text-xs text-muted-foreground">
-              {gameState.playerTeam === 'red' ? 'W/S to move' : '↑/↓ to move'}
+              {playerTeam === 'red' ? 'W/S to move' : '↑/↓ to move'}
             </div>
           </div>
         </div>
 
         {/* Game Canvas */}
-        <Card className="p-4 bg-foosball-table">
+        <Card className="p-4">
           <canvas
             ref={canvasRef}
             width={FIELD_WIDTH}
             height={FIELD_HEIGHT}
-            className="border-2 border-foosball-lines rounded-lg mx-auto block bg-foosball-field"
+            className="border-2 border-gray-400 rounded-lg mx-auto block bg-green-100"
           />
         </Card>
 
@@ -577,12 +589,12 @@ export const FoosballGame = () => {
         <Card className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div>
-              <h3 className="font-semibold text-team-red mb-2">Red Team Controls:</h3>
+              <h3 className="font-semibold text-red-500 mb-2">Red Team Controls:</h3>
               <p>W - Move players up</p>
               <p>S - Move players down</p>
             </div>
             <div>
-              <h3 className="font-semibold text-team-blue mb-2">Blue Team Controls:</h3>
+              <h3 className="font-semibold text-blue-500 mb-2">Blue Team Controls:</h3>
               {gameState.gameMode === 'single' ? (
                 <p>Computer controlled</p>
               ) : (

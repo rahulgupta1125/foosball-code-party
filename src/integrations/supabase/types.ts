@@ -68,6 +68,36 @@ export type Database = {
         }
         Relationships: []
       }
+      rooms: {
+        Row: {
+          created_at: string
+          creator_id: string
+          game_state: Json
+          id: string
+          opponent_id: string | null
+          room_code: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          creator_id: string
+          game_state?: Json
+          id?: string
+          opponent_id?: string | null
+          room_code: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          creator_id?: string
+          game_state?: Json
+          id?: string
+          opponent_id?: string | null
+          room_code?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
